@@ -1,0 +1,14 @@
+; Hash v1.0 config file
+[modules]
+kernel32
+ole32
+[functions]
+kernel32!LoadLibraryA
+ole32!CoInitialize
+ole32!CoInitializeEx
+ole32!CoCreateInstance
+ole32!CoCreateInstanceEx
+[hash function]
+XORROR16B
+[collision level]
+all
